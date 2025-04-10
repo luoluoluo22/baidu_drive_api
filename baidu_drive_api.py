@@ -20,6 +20,73 @@ os.environ['FUNUTIL_LOG_DISABLE'] = '1'
 os.environ['FUNUTIL_LOG_TO_FILE'] = '0'
 os.environ['FUNSECRET_DISABLE_LOGS'] = '1'
 
+# 先导入模拟的funutil模块
+try:
+    print("尝试导入模拟的funutil模块...")
+    import mock_funutil
+    print("成功导入模拟的funutil模块")
+except Exception as e:
+    print(f"导入模拟的funutil模块失败: {e}")
+    # 如果导入失败，则创建一个简单的模拟模块
+    print("创建内置的模拟模块...")
+
+    # 创建一个空的日志记录器
+    class DummyLogger:
+        def __init__(self, name=None):
+            self.name = name or "dummy"
+
+        def debug(self, msg, *args, **kwargs):
+            pass
+
+        def info(self, msg, *args, **kwargs):
+            pass
+
+        def warning(self, msg, *args, **kwargs):
+            pass
+
+        def error(self, msg, *args, **kwargs):
+            pass
+
+        def critical(self, msg, *args, **kwargs):
+            pass
+
+        def exception(self, msg, *args, **kwargs):
+            pass
+
+        def log(self, level, msg, *args, **kwargs):
+            pass
+
+    # 模拟模块
+    class MockModule:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+
+    # 注入模拟模块到sys.modules
+    mock_module = MockModule()
+    sys.modules['funutil'] = mock_module
+    sys.modules['funutil.util'] = mock_module
+    sys.modules['funutil.util.log'] = mock_module
+    sys.modules['funsecret'] = mock_module
+    sys.modules['funsecret.secret'] = mock_module
+    sys.modules['funsecret.secret.cache_secret'] = mock_module
+
+    # 导出函数
+    def getLogger(name=None):
+        return DummyLogger(name)
+
+    def get_logger(name=None):
+        return DummyLogger(name)
+
+    # 注入到全局命名空间
+    sys.modules['funutil'].getLogger = getLogger
+    sys.modules['funutil'].get_logger = get_logger
+    sys.modules['funutil.util'].getLogger = getLogger
+    sys.modules['funutil.util'].get_logger = get_logger
+    sys.modules['funutil.util.log'].getLogger = getLogger
+    sys.modules['funutil.util.log'].get_logger = get_logger
+
+    print("成功创建内置的模拟模块")
+
 # 禁用funutil库创建logsdir
 # 使用猴子补丁来防止os.makedirs创建'logs'目录
 original_makedirs = os.makedirs

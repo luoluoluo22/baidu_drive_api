@@ -6,20 +6,16 @@ export FUNUTIL_LOG_TO_FILE=0
 export FUNSECRET_DISABLE_LOGS=1
 export PORT=7860
 
-# 创建一个空的logs目录，防止fundrive库尝试创建它时失败
-echo "Creating logs directory..."
-mkdir -p logs
-chmod 777 logs
-echo "Creating .gitignore file in logs directory..."
-touch logs/.gitignore
-chmod 666 logs/.gitignore
-echo "Logs directory setup complete"
-
 # 显示环境信息
 echo "Python version:"
 python --version
 echo "Installed packages:"
 pip list | grep -E "fundrive|funsecret|funutil"
+
+# 复制mock_funutil.py到当前目录
+echo "Copying mock_funutil.py to current directory..."
+cp /app/mock_funutil.py /app/
+echo "Copy complete"
 
 # 启动服务
 echo "Starting service..."
