@@ -6,13 +6,33 @@
 import os
 import json
 import tempfile
+import sys
+import logging
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
-from fundrive.drives.baidu.drive import BaiDuDrive
+
+# 创建必要的目录，避免fundrive依赖问题
+os.makedirs('/tmp/logs', exist_ok=True)
+os.makedirs('/tmp/.fundrive', exist_ok=True)
 
 # 设置HOME环境变量（如果不存在）
 if 'HOME' not in os.environ:
-    os.environ['HOME'] = os.environ.get('USERPROFILE', '')
+    os.environ['HOME'] = os.environ.get('USERPROFILE', '/tmp')
+    print(f"已设置HOME环境变量为: {os.environ['HOME']}")
+
+# 配置日志
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger('baidu_drive_api')
+
+# 导入百度网盘API
+try:
+    from fundrive.drives.baidu.drive import BaiDuDrive
+    logger.info("成功导入BaiDuDrive")
+except Exception as e:
+    logger.error(f"导入BaiDuDrive失败: {e}")
+    raise
 
 app = Flask(__name__)
 
@@ -49,20 +69,20 @@ def login():
     data = request.json
     if not data or 'bduss' not in data:
         return jsonify({"status": "error", "message": "缺少bduss参数"}), 400
-    
+
     bduss = data['bduss']
     session_id = data.get('session_id', bduss[:10])  # 使用bduss前10位作为会话ID
-    
+
     try:
         # 初始化客户端
         client = BaiDuDrive()
         login_result = client.login(bduss=bduss)
-        
+
         if login_result:
             # 存储客户端实例
             client_instances[session_id] = client
             return jsonify({
-                "status": "success", 
+                "status": "success",
                 "message": "登录成功",
                 "session_id": session_id
             })
@@ -76,20 +96,20 @@ def list_files():
     """列出文件和目录"""
     session_id = request.headers.get('X-Session-ID')
     path = request.args.get('path', '/')
-    
+
     if not session_id or session_id not in client_instances:
         return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
-    
+
     client = client_instances[session_id]
-    
+
     try:
         # 获取文件和目录列表
         file_list = client.get_file_list(path)
         dir_list = client.get_dir_list(path)
-        
+
         # 合并并格式化结果
         result = []
-        
+
         for item in file_list:
             result.append({
                 "name": item.name if hasattr(item, 'name') else "未知",
@@ -98,14 +118,14 @@ def list_files():
                 "size_formatted": f"{item.size / (1024 * 1024):.2f} MB" if hasattr(item, 'size') else "0 MB",
                 "path": f"{path.rstrip('/')}/{item.name}" if hasattr(item, 'name') else path
             })
-            
+
         for item in dir_list:
             result.append({
                 "name": item.name if hasattr(item, 'name') else "未知",
                 "type": "directory",
                 "path": f"{path.rstrip('/')}/{item.name}" if hasattr(item, 'name') else path
             })
-            
+
         return jsonify({
             "status": "success",
             "path": path,
@@ -120,34 +140,34 @@ def upload_file():
     """上传文件"""
     session_id = request.headers.get('X-Session-ID')
     remote_path = request.form.get('path', '/')
-    
+
     if not session_id or session_id not in client_instances:
         return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
-    
+
     if 'file' not in request.files:
         return jsonify({"status": "error", "message": "没有文件被上传"}), 400
-    
+
     file = request.files['file']
     if file.filename == '':
         return jsonify({"status": "error", "message": "未选择文件"}), 400
-    
+
     client = client_instances[session_id]
-    
+
     try:
         # 保存上传的文件到临时目录
         filename = secure_filename(file.filename)
         temp_dir = tempfile.mkdtemp()
         temp_file_path = os.path.join(temp_dir, filename)
         file.save(temp_file_path)
-        
+
         # 上传到百度网盘
         remote_file_path = f"{remote_path.rstrip('/')}/{filename}"
         upload_result = client.upload_file(temp_file_path, remote_file_path)
-        
+
         # 清理临时文件
         os.remove(temp_file_path)
         os.rmdir(temp_dir)
-        
+
         return jsonify({
             "status": "success",
             "message": "文件上传成功",
@@ -162,24 +182,24 @@ def download_file():
     """下载文件"""
     session_id = request.headers.get('X-Session-ID')
     file_path = request.args.get('path')
-    
+
     if not session_id or session_id not in client_instances:
         return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
-    
+
     if not file_path:
         return jsonify({"status": "error", "message": "缺少文件路径参数"}), 400
-    
+
     client = client_instances[session_id]
-    
+
     try:
         # 创建临时目录用于下载
         temp_dir = tempfile.mkdtemp()
         filename = os.path.basename(file_path)
         temp_file_path = os.path.join(temp_dir, filename)
-        
+
         # 下载文件
         download_result = client.download_file(file_path, filepath=temp_file_path)
-        
+
         if os.path.exists(temp_file_path):
             # 发送文件给客户端
             return send_file(
@@ -198,19 +218,19 @@ def get_download_link():
     """获取文件下载链接"""
     session_id = request.headers.get('X-Session-ID')
     file_path = request.args.get('path')
-    
+
     if not session_id or session_id not in client_instances:
         return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
-    
+
     if not file_path:
         return jsonify({"status": "error", "message": "缺少文件路径参数"}), 400
-    
+
     client = client_instances[session_id]
-    
+
     try:
         # 获取下载链接
         download_link = client.drive.download_link(file_path)
-        
+
         return jsonify({
             "status": "success",
             "file_path": file_path,
@@ -225,19 +245,19 @@ def delete_file():
     """删除文件"""
     session_id = request.headers.get('X-Session-ID')
     file_path = request.args.get('path')
-    
+
     if not session_id or session_id not in client_instances:
         return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
-    
+
     if not file_path:
         return jsonify({"status": "error", "message": "缺少文件路径参数"}), 400
-    
+
     client = client_instances[session_id]
-    
+
     try:
         # 删除文件
         delete_result = client.delete(file_path)
-        
+
         return jsonify({
             "status": "success",
             "message": "文件删除成功",
@@ -251,12 +271,12 @@ def delete_file():
 def logout():
     """登出接口"""
     session_id = request.headers.get('X-Session-ID')
-    
+
     if session_id and session_id in client_instances:
         # 删除客户端实例
         del client_instances[session_id]
         return jsonify({"status": "success", "message": "登出成功"})
-    
+
     return jsonify({"status": "warning", "message": "会话不存在或已过期"})
 
 # 如果直接运行此文件
