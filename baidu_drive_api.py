@@ -11,20 +11,31 @@ import logging
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 
-# 创建必要的目录，避免fundrive依赖问题
-os.makedirs('/tmp/logs', exist_ok=True)
-os.makedirs('/tmp/.fundrive', exist_ok=True)
-
-# 设置HOME环境变量（如果不存在）
-if 'HOME' not in os.environ:
-    os.environ['HOME'] = os.environ.get('USERPROFILE', '/tmp')
-    print(f"已设置HOME环境变量为: {os.environ['HOME']}")
-
 # 配置日志
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger('baidu_drive_api')
+
+# 创建必要的目录，避免fundrive依赖问题
+try:
+    # 尝试创建多个可能的目录路径
+    for path in [
+        '/app/logs', '/app/.fundrive',
+        '/tmp/logs', '/tmp/.fundrive',
+        './logs', './.fundrive'
+    ]:
+        os.makedirs(path, exist_ok=True)
+        print(f"成功创建目录: {path}")
+    logger.info("所有必要目录创建完成")
+except Exception as e:
+    print(f"创建目录失败: {e}")
+    logger.warning(f"创建目录失败: {e}")
+
+# 设置HOME环境变量（如果不存在）
+if 'HOME' not in os.environ:
+    os.environ['HOME'] = os.environ.get('USERPROFILE', '/tmp')
+    print(f"已设置HOME环境变量为: {os.environ['HOME']}")
 
 # 导入百度网盘API
 try:

@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  baidu-drive-api:
+    build: .
+    ports:
+      - "10000:10000"
+    environment:
+      - PORT=10000
+      - HOME=/app
+      - FUNUTIL_LOG_DISABLE=1
+      - FUNUTIL_LOG_TO_FILE=0
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
