@@ -1,313 +1,265 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
-百度网盘HTTP API服务
-提供百度网盘功能的RESTful API接口
+百度网盘API服务
+提供登录、列出文件和目录、上传、下载和删除文件的API接口
 """
 
-# 在导入任何库之前设置环境变量
 import os
-import sys
+import json
+import tempfile
+from flask import Flask, request, jsonify, send_file
+from werkzeug.utils import secure_filename
+from fundrive.drives.baidu.drive import BaiDuDrive
 
 # 设置HOME环境变量（如果不存在）
 if 'HOME' not in os.environ:
     os.environ['HOME'] = os.environ.get('USERPROFILE', '')
-    print(f"已设置HOME环境变量为: {os.environ['HOME']}")
 
-# 不需要设置环境变量或使用猿子补丁，因为我们使用的是baidupcs_py库，它不会创建日志目录
+app = Flask(__name__)
 
-# 设置日志记录器
-import logging
+# 全局变量存储客户端实例
+client_instances = {}
 
-# 配置日志 - 只输出到控制台
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-# 导入其他库
-import time
-import json
-import tempfile
-import traceback
-from flask import Flask, request, jsonify, send_file, Response, send_from_directory
-from werkzeug.utils import secure_filename
-from functools import wraps
-
-# 导入百度网盘API
-# 只使用自定义的BaiDuDrive
-print("尝试导入自定义的BaiDuDrive...")
-try:
-    from custom_baidu_drive import BaiDuDrive
-    print("成功导入自定义的BaiDuDrive")
-except Exception as e:
-    print(f"导入自定义的BaiDuDrive失败: {e}")
-    print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
-    sys.exit(1)
-
-app = Flask(__name__, static_folder='static')
-app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 限制上传文件大小为1GB
-app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()  # 使用临时目录存储上传的文件
-
-# 存储BDUSS和客户端实例的字典
-clients = {}
-
-# 身份验证装饰器
-def require_bduss(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        bduss = request.headers.get('X-Bduss')
-        if not bduss:
-            return jsonify({"error": "未提供BDUSS，请在请求头中添加X-Bduss"}), 401
-
-        # 检查是否已有客户端实例
-        if bduss not in clients:
-            try:
-                client = BaiDuDrive()
-                login_result = client.login(bduss=bduss)
-                if not login_result:
-                    return jsonify({"error": "BDUSS无效或已过期"}), 401
-                clients[bduss] = client
-                logger.info(f"创建新的客户端实例，BDUSS: {bduss[:10]}...")
-            except Exception as e:
-                logger.error(f"创建客户端实例失败: {str(e)}")
-                return jsonify({"error": f"创建客户端实例失败: {str(e)}"}), 500
-
-        # 将客户端实例传递给视图函数
-        return f(clients[bduss], *args, **kwargs)
-    return decorated
-
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
-    """API首页，显示简单的使用说明"""
-    # 如果存在static/index.html，则返回它
-    if os.path.exists(os.path.join(app.static_folder, 'index.html')):
-        return send_from_directory(app.static_folder, 'index.html')
-
-    # 否则返回JSON数据
+    """API首页"""
     return jsonify({
         "name": "百度网盘API服务",
         "version": "1.0.0",
-        "description": "提供百度网盘功能的RESTful API接口",
         "endpoints": [
-            {"path": "/api/files", "method": "GET", "description": "列出文件和目录"},
-            {"path": "/api/files", "method": "POST", "description": "上传文件"},
-            {"path": "/api/files/<path:file_path>", "method": "GET", "description": "获取文件的下载链接"},
-            {"path": "/api/files/<path:file_path>", "method": "DELETE", "description": "删除文件"},
-            {"path": "/api/quota", "method": "GET", "description": "获取网盘配额信息"}
-        ],
-        "authentication": "在请求头中添加X-Bduss字段，值为百度网盘的BDUSS"
+            {"path": "/", "method": "GET", "description": "API信息"},
+            {"path": "/health", "method": "GET", "description": "健康检查"},
+            {"path": "/login", "method": "POST", "description": "登录百度网盘"},
+            {"path": "/list", "method": "GET", "description": "列出文件和目录"},
+            {"path": "/upload", "method": "POST", "description": "上传文件"},
+            {"path": "/download", "method": "GET", "description": "下载文件"},
+            {"path": "/download_link", "method": "GET", "description": "获取文件下载链接"},
+            {"path": "/delete", "method": "DELETE", "description": "删除文件"},
+            {"path": "/logout", "method": "POST", "description": "登出"}
+        ]
     })
 
-@app.route('/api/files')
-@require_bduss
-def list_files(client):
-    """列出文件和目录"""
-    path = request.args.get('path', '/')
+@app.route('/health', methods=['GET'])
+def health_check():
+    """健康检查接口"""
+    return jsonify({"status": "ok", "message": "服务正常运行"})
 
+@app.route('/login', methods=['POST'])
+def login():
+    """登录接口"""
+    data = request.json
+    if not data or 'bduss' not in data:
+        return jsonify({"status": "error", "message": "缺少bduss参数"}), 400
+    
+    bduss = data['bduss']
+    session_id = data.get('session_id', bduss[:10])  # 使用bduss前10位作为会话ID
+    
     try:
-        # 获取文件列表
+        # 初始化客户端
+        client = BaiDuDrive()
+        login_result = client.login(bduss=bduss)
+        
+        if login_result:
+            # 存储客户端实例
+            client_instances[session_id] = client
+            return jsonify({
+                "status": "success", 
+                "message": "登录成功",
+                "session_id": session_id
+            })
+        else:
+            return jsonify({"status": "error", "message": "登录失败，请检查bduss是否有效"}), 401
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"登录异常: {str(e)}"}), 500
+
+@app.route('/list', methods=['GET'])
+def list_files():
+    """列出文件和目录"""
+    session_id = request.headers.get('X-Session-ID')
+    path = request.args.get('path', '/')
+    
+    if not session_id or session_id not in client_instances:
+        return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
+    
+    client = client_instances[session_id]
+    
+    try:
+        # 获取文件和目录列表
         file_list = client.get_file_list(path)
-        # 获取目录列表
         dir_list = client.get_dir_list(path)
-
-        # 合并文件和目录列表
-        all_items = []
-
-        # 处理目录
-        for item in dir_list:
-            item_data = {
-                "name": item.name if hasattr(item, 'name') else "未知",
-                "path": item.path if hasattr(item, 'path') else path + "/" + item.name,
-                "type": "directory",
-                "size": item.size if hasattr(item, 'size') else 0,
-                "size_formatted": f"{item.size / (1024 * 1024):.2f} MB" if hasattr(item, 'size') else "0.00 MB"
-            }
-            all_items.append(item_data)
-
-        # 处理文件
+        
+        # 合并并格式化结果
+        result = []
+        
         for item in file_list:
-            item_data = {
+            result.append({
                 "name": item.name if hasattr(item, 'name') else "未知",
-                "path": item.path if hasattr(item, 'path') else path + "/" + item.name,
                 "type": "file",
                 "size": item.size if hasattr(item, 'size') else 0,
-                "size_formatted": f"{item.size / (1024 * 1024):.2f} MB" if hasattr(item, 'size') else "0.00 MB"
-            }
-            all_items.append(item_data)
-
+                "size_formatted": f"{item.size / (1024 * 1024):.2f} MB" if hasattr(item, 'size') else "0 MB",
+                "path": f"{path.rstrip('/')}/{item.name}" if hasattr(item, 'name') else path
+            })
+            
+        for item in dir_list:
+            result.append({
+                "name": item.name if hasattr(item, 'name') else "未知",
+                "type": "directory",
+                "path": f"{path.rstrip('/')}/{item.name}" if hasattr(item, 'name') else path
+            })
+            
         return jsonify({
+            "status": "success",
             "path": path,
-            "items": all_items,
-            "total": len(all_items)
+            "items": result,
+            "total": len(result)
         })
     except Exception as e:
-        logger.error(f"列出文件时出错: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({"error": f"列出文件时出错: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"获取文件列表异常: {str(e)}"}), 500
 
-@app.route('/api/files', methods=['POST'])
-@require_bduss
-def upload_file(client):
+@app.route('/upload', methods=['POST'])
+def upload_file():
     """上传文件"""
+    session_id = request.headers.get('X-Session-ID')
+    remote_path = request.form.get('path', '/')
+    
+    if not session_id or session_id not in client_instances:
+        return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
+    
     if 'file' not in request.files:
-        return jsonify({"error": "未提供文件"}), 400
-
+        return jsonify({"status": "error", "message": "没有文件被上传"}), 400
+    
     file = request.files['file']
     if file.filename == '':
-        return jsonify({"error": "未选择文件"}), 400
-
-    remote_path = request.form.get('path', '/')
-    if not remote_path.endswith('/'):
-        remote_path += '/'
-
+        return jsonify({"status": "error", "message": "未选择文件"}), 400
+    
+    client = client_instances[session_id]
+    
     try:
         # 保存上传的文件到临时目录
         filename = secure_filename(file.filename)
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(temp_path)
-
-        # 上传文件到百度网盘
-        remote_file_path = f"{remote_path}{filename}"
-        upload_result = client.upload_file(temp_path, remote_file_path)
-
-        # 删除临时文件
-        os.remove(temp_path)
-
-        if upload_result:
-            return jsonify({
-                "success": True,
-                "message": f"文件 {filename} 上传成功",
-                "path": remote_file_path
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": f"文件 {filename} 上传失败"
-            }), 500
+        temp_dir = tempfile.mkdtemp()
+        temp_file_path = os.path.join(temp_dir, filename)
+        file.save(temp_file_path)
+        
+        # 上传到百度网盘
+        remote_file_path = f"{remote_path.rstrip('/')}/{filename}"
+        upload_result = client.upload_file(temp_file_path, remote_file_path)
+        
+        # 清理临时文件
+        os.remove(temp_file_path)
+        os.rmdir(temp_dir)
+        
+        return jsonify({
+            "status": "success",
+            "message": "文件上传成功",
+            "remote_path": remote_file_path,
+            "result": upload_result
+        })
     except Exception as e:
-        logger.error(f"上传文件时出错: {str(e)}\n{traceback.format_exc()}")
-        # 确保临时文件被删除
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        return jsonify({"error": f"上传文件时出错: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"上传文件异常: {str(e)}"}), 500
 
-@app.route('/api/files/<path:file_path>')
-@require_bduss
-def get_download_link(client, file_path):
-    """获取文件的下载链接"""
+@app.route('/download', methods=['GET'])
+def download_file():
+    """下载文件"""
+    session_id = request.headers.get('X-Session-ID')
+    file_path = request.args.get('path')
+    
+    if not session_id or session_id not in client_instances:
+        return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
+    
+    if not file_path:
+        return jsonify({"status": "error", "message": "缺少文件路径参数"}), 400
+    
+    client = client_instances[session_id]
+    
     try:
-        # 确保文件路径以/开头
-        if not file_path.startswith('/'):
-            file_path = '/' + file_path
-
-        # 获取文件名
+        # 创建临时目录用于下载
+        temp_dir = tempfile.mkdtemp()
         filename = os.path.basename(file_path)
-
-        # 使用底层API获取下载链接
-        try:
-            download_link = client.drive.download_link(file_path)
-
-            # 生成完整的下载信息
-            headers = {
-                "User-Agent": "softxm;netdisk",
-                "Connection": "Keep-Alive",
-                "Cookie": f"BDUSS={client.drive.bduss};ptoken={client.drive.ptoken}",
-            }
-
-            return jsonify({
-                "success": True,
-                "filename": filename,
-                "download_link": download_link,
-                "headers": headers,
-                "message": "下载链接获取成功",
-                "note": "注意：下载链接有效期较短，请尽快使用"
-            })
-        except Exception as e:
-            return jsonify({"error": f"获取下载链接失败: {str(e)}"}), 500
+        temp_file_path = os.path.join(temp_dir, filename)
+        
+        # 下载文件
+        download_result = client.download_file(file_path, filepath=temp_file_path)
+        
+        if os.path.exists(temp_file_path):
+            # 发送文件给客户端
+            return send_file(
+                temp_file_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/octet-stream'
+            )
+        else:
+            return jsonify({"status": "error", "message": "文件下载失败"}), 500
     except Exception as e:
-        logger.error(f"获取下载链接时出错: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({"error": f"获取下载链接时出错: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"下载文件异常: {str(e)}"}), 500
 
-@app.route('/api/files/<path:file_path>', methods=['DELETE'])
-@require_bduss
-def delete_file(client, file_path):
-    """删除文件"""
+@app.route('/download_link', methods=['GET'])
+def get_download_link():
+    """获取文件下载链接"""
+    session_id = request.headers.get('X-Session-ID')
+    file_path = request.args.get('path')
+    
+    if not session_id or session_id not in client_instances:
+        return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
+    
+    if not file_path:
+        return jsonify({"status": "error", "message": "缺少文件路径参数"}), 400
+    
+    client = client_instances[session_id]
+    
     try:
-        # 确保文件路径以/开头
-        if not file_path.startswith('/'):
-            file_path = '/' + file_path
+        # 获取下载链接
+        download_link = client.drive.download_link(file_path)
+        
+        return jsonify({
+            "status": "success",
+            "file_path": file_path,
+            "download_link": download_link,
+            "note": "下载链接需要带上相应的Cookie才能访问"
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"获取下载链接异常: {str(e)}"}), 500
 
+@app.route('/delete', methods=['DELETE'])
+def delete_file():
+    """删除文件"""
+    session_id = request.headers.get('X-Session-ID')
+    file_path = request.args.get('path')
+    
+    if not session_id or session_id not in client_instances:
+        return jsonify({"status": "error", "message": "未登录或会话已过期"}), 401
+    
+    if not file_path:
+        return jsonify({"status": "error", "message": "缺少文件路径参数"}), 400
+    
+    client = client_instances[session_id]
+    
+    try:
         # 删除文件
         delete_result = client.delete(file_path)
-
-        if delete_result is None or delete_result:
-            return jsonify({
-                "success": True,
-                "message": f"文件 {file_path} 删除成功"
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": f"文件 {file_path} 删除失败"
-            }), 500
+        
+        return jsonify({
+            "status": "success",
+            "message": "文件删除成功",
+            "file_path": file_path,
+            "result": delete_result
+        })
     except Exception as e:
-        logger.error(f"删除文件时出错: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({"error": f"删除文件时出错: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"删除文件异常: {str(e)}"}), 500
 
-@app.route('/api/quota')
-@require_bduss
-def get_quota(client):
-    """获取网盘配额信息"""
-    try:
-        # 获取配额信息
-        quota_info = client.get_quota()
+@app.route('/logout', methods=['POST'])
+def logout():
+    """登出接口"""
+    session_id = request.headers.get('X-Session-ID')
+    
+    if session_id and session_id in client_instances:
+        # 删除客户端实例
+        del client_instances[session_id]
+        return jsonify({"status": "success", "message": "登出成功"})
+    
+    return jsonify({"status": "warning", "message": "会话不存在或已过期"})
 
-        if quota_info:
-            total_space = quota_info.get('total', 0) / (1024 * 1024 * 1024)  # 转换为GB
-            used_space = quota_info.get('used', 0) / (1024 * 1024 * 1024)    # 转换为GB
-
-            return jsonify({
-                "total": quota_info.get('total', 0),
-                "used": quota_info.get('used', 0),
-                "free": quota_info.get('total', 0) - quota_info.get('used', 0),
-                "total_formatted": f"{total_space:.2f} GB",
-                "used_formatted": f"{used_space:.2f} GB",
-                "free_formatted": f"{total_space - used_space:.2f} GB"
-            })
-        else:
-            return jsonify({"error": "获取配额信息失败"}), 500
-    except Exception as e:
-        logger.error(f"获取配额信息时出错: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({"error": f"获取配额信息时出错: {str(e)}"}), 500
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "资源不存在"}), 404
-
-@app.errorhandler(500)
-def server_error(error):
-    return jsonify({"error": "服务器内部错误"}), 500
-
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    return jsonify({"error": "上传的文件太大"}), 413
-
-# 添加健康检查端点
-@app.route('/health')
-def health_check():
-    return jsonify({
-        "status": "ok",
-        "message": "Service is running",
-        "mode": "real",
-        "description": "使用真实百度网盘API"
-    })
-
+# 如果直接运行此文件
 if __name__ == '__main__':
-    # 使用环境变量中的端口（如果有），否则使用7860（Hugging Face的默认端口）
-    port = int(os.environ.get('PORT', 7860))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
