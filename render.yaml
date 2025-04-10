@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: baidu-drive-api
+    env: docker
+    repo: https://github.com/luoluoluo22/baidu_drive_api.git
+    region: singapore
+    plan: free
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: HOME
+        value: /app
+      - key: FUNUTIL_LOG_DISABLE
+        value: 1
+      - key: FUNUTIL_LOG_TO_FILE
+        value: 0
+      - key: PYTHONUNBUFFERED
+        value: 1
