@@ -15,32 +15,7 @@ if 'HOME' not in os.environ:
     os.environ['HOME'] = os.environ.get('USERPROFILE', '')
     print(f"已设置HOME环境变量为: {os.environ['HOME']}")
 
-# 禁用日志文件写入
-os.environ['FUNUTIL_LOG_DISABLE'] = '1'
-os.environ['FUNUTIL_LOG_TO_FILE'] = '0'
-os.environ['FUNSECRET_DISABLE_LOGS'] = '1'
-
-# 禁用fundrive库创建日志目录
-# 使用猿子补丁来防止os.makedirs创建'logs'目录
-original_makedirs = os.makedirs
-def patched_makedirs(name, *args, **kwargs):
-    if name == 'logs' or name.startswith('logs/'):
-        print(f"[警告] 已拦截对{name}目录的创建尝试")
-        # 创建一个假的成功返回
-        return None
-    return original_makedirs(name, *args, **kwargs)
-os.makedirs = patched_makedirs
-
-# 拦截文件打开操作
-original_open = open
-def patched_open(file, *args, **kwargs):
-    if isinstance(file, str) and (file.startswith('logs/') or file == 'logs'):
-        print(f"[警告] 已拦截对{file}文件的打开尝试")
-        # 创建一个内存中的空文件对象
-        import io
-        return io.StringIO()
-    return original_open(file, *args, **kwargs)
-open = patched_open
+# 不需要设置环境变量或使用猿子补丁，因为我们使用的是baidupcs_py库，它不会创建日志目录
 
 # 设置日志记录器
 import logging

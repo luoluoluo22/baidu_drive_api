@@ -16,12 +16,13 @@ os.environ['FUNUTIL_LOG_DISABLE'] = '1'
 os.environ['FUNUTIL_LOG_TO_FILE'] = '0'
 os.environ['FUNSECRET_DISABLE_LOGS'] = '1'
 
-# 直接导入BaiduPCSApi和PcsFile
+# 直接导入BaiduPCS和PathObject
+# 使用baidupcs_py库，它不会尝试创建日志目录
 try:
-    # 只尝试导入fundrive.drives.baidu
-    from fundrive.drives.baidu import BaiduPCSApi, PcsFile
+    from baidupcs_py.baidupcs import BaiduPCS as BaiduPCSApi
+    from baidupcs_py.common.path import PathObject as PcsFile
 except ImportError:
-    print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
+    print("错误: 无法导入baidupcs_py库，请安装: pip install baidupcs-py")
     sys.exit(1)
 
 # 定义DriveFile类（简化版）
@@ -104,7 +105,7 @@ def convert(file: PcsFile) -> DriveFile:
 class CustomBaiDuDrive:
     """
     自定义百度网盘驱动类
-    不依赖于funsecret和funutil库，直接使用传入的凭据
+    直接使用baidupcs_py库，避免创建日志目录的问题
     """
 
     def __init__(self, *args: Any, **kwargs: Any):
