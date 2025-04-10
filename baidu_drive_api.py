@@ -6,20 +6,19 @@
 提供百度网盘功能的RESTful API接口
 """
 
+# 在导入任何库之前设置环境变量和猴子补丁
 import os
-import time
-import json
-import logging
-import tempfile
-import traceback
-from flask import Flask, request, jsonify, send_file, Response, send_from_directory
-from werkzeug.utils import secure_filename
-from functools import wraps
+import sys
 
 # 设置HOME环境变量（如果不存在）
 if 'HOME' not in os.environ:
     os.environ['HOME'] = os.environ.get('USERPROFILE', '')
     print(f"已设置HOME环境变量为: {os.environ['HOME']}")
+
+# 禁用日志文件写入
+os.environ['FUNUTIL_LOG_DISABLE'] = '1'
+os.environ['FUNUTIL_LOG_TO_FILE'] = '0'
+os.environ['FUNSECRET_DISABLE_LOGS'] = '1'
 
 # 禁用funutil库创建logsdir
 # 使用猴子补丁来防止os.makedirs创建'logs'目录
@@ -27,7 +26,8 @@ original_makedirs = os.makedirs
 def patched_makedirs(name, *args, **kwargs):
     if name == 'logs' or name.startswith('logs/'):
         print(f"[警告] 已拦截对{name}目录的创建尝试")
-        return
+        # 创建一个假的成功返回
+        return None
     return original_makedirs(name, *args, **kwargs)
 os.makedirs = patched_makedirs
 
@@ -42,61 +42,22 @@ def patched_open(file, *args, **kwargs):
     return original_open(file, *args, **kwargs)
 open = patched_open
 
-# 禁用日志文件写入
-# 设置环境变量来尝试禁用日志文件
-os.environ['FUNUTIL_LOG_DISABLE'] = '1'
-os.environ['FUNUTIL_LOG_TO_FILE'] = '0'
+# 现在导入其他库
+import time
+import json
+import logging
+import tempfile
+import traceback
+from flask import Flask, request, jsonify, send_file, Response, send_from_directory
+from werkzeug.utils import secure_filename
+from functools import wraps
 
 # 导入百度网盘API
-try:
-    print("尝试导入真实BaiDuDrive...")
-    from fundrive.drives.baidu.drive import BaiDuDrive
-    print("成功导入真实BaiDuDrive")
-    USE_REAL_API = True
-except Exception as e:
-    print(f"导入真实BaiDuDrive失败: {e}")
-    print("将使用模拟的BaiDuDrive类")
-
-    # 模拟百度网盘API
-    class BaiDuDrive:
-        def __init__(self):
-            self.drive = self
-            self.bduss = None
-            self.ptoken = None
-            print("创建了模拟的BaiDuDrive实例")
-
-        def login(self, bduss=None):
-            self.bduss = bduss
-            self.ptoken = "fake_ptoken"
-            print(f"模拟登录成功，bduss: {bduss[:10] if bduss else None}...")
-            return True
-
-        def get_file_list(self, path="/"):
-            print(f"模拟获取文件列表，路径: {path}")
-            return []
-
-        def get_dir_list(self, path="/"):
-            print(f"模拟获取目录列表，路径: {path}")
-            return []
-
-        def upload_file(self, local_path, remote_path):
-            print(f"模拟上传文件，本地路径: {local_path}，远程路径: {remote_path}")
-            return True
-
-        def delete(self, path):
-            print(f"模拟删除文件，路径: {path}")
-            return True
-
-        def get_quota(self):
-            print("模拟获取配额信息")
-            return {"total": 2199023255552, "used": 1073741824}
-
-        def download_link(self, path):
-            print(f"模拟获取下载链接，路径: {path}")
-            return "https://example.com/fake_download_link"
-
-    USE_REAL_API = False
-    print("成功创建模拟的BaiDuDrive类")
+# 强制使用真实的BaiDuDrive
+print("尝试导入真实BaiDuDrive...")
+from fundrive.drives.baidu.drive import BaiDuDrive
+print("成功导入真实BaiDuDrive")
+USE_REAL_API = True
 
 # 配置日志 - 只输出到控制台
 logging.basicConfig(
