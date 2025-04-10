@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>百度网盘API服务</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #1a73e8;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .endpoint {
+            margin-bottom: 30px;
+            border-left: 3px solid #1a73e8;
+            padding-left: 15px;
+        }
+        .method {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .get {
+            background-color: #4CAF50;
+        }
+        .post {
+            background-color: #2196F3;
+        }
+        .delete {
+            background-color: #F44336;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+        }
+        .status.loading {
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+        }
+        .status.success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0d62c9;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>百度网盘API服务</h1>
+    
+    <div class="status" id="serviceStatus">
+        <p>正在检查服务状态...</p>
+    </div>
+
+    <p>这是一个基于Flask的百度网盘API服务，提供了百度网盘的主要功能的RESTful API接口。</p>
+    
+    <h2>使用方法</h2>
+    <p>1. 在请求头中添加<code>X-Bduss</code>字段，值为百度网盘的BDUSS</p>
+    <p>2. 调用相应的API端点</p>
+    
+    <h2>获取BDUSS</h2>
+    <p>BDUSS可以从浏览器Cookie中获取：</p>
+    <ol>
+        <li>登录百度网盘网页版</li>
+        <li>打开浏览器开发者工具（F12）</li>
+        <li>切换到"应用"或"Application"选项卡</li>
+        <li>在左侧找到"Cookies"，然后选择百度网盘的域名</li>
+        <li>在右侧找到名为"BDUSS"的Cookie，其值就是BDUSS</li>
+    </ol>
+    
+    <h2>API端点</h2>
+    
+    <div class="endpoint">
+        <h3><span class="method get">GET</span> /api/files</h3>
+        <p>列出指定路径下的文件和目录</p>
+        <p><strong>参数：</strong> <code>path</code> - 要列出内容的路径，默认为根目录（/）</p>
+        <pre><code>curl -H "X-Bduss: YOUR_BDUSS_VALUE" https://your-space-name.hf.space/api/files?path=/</code></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h3><span class="method post">POST</span> /api/files</h3>
+        <p>上传文件到指定路径</p>
+        <p><strong>参数：</strong></p>
+        <ul>
+            <li><code>file</code> - 要上传的文件（multipart/form-data）</li>
+            <li><code>path</code> - 远程目录路径，默认为根目录（/）</li>
+        </ul>
+        <pre><code>curl -H "X-Bduss: YOUR_BDUSS_VALUE" -F "file=@local_file.txt" -F "path=/" https://your-space-name.hf.space/api/files</code></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h3><span class="method get">GET</span> /api/files/&lt;file_path&gt;</h3>
+        <p>获取文件的下载链接</p>
+        <pre><code>curl -H "X-Bduss: YOUR_BDUSS_VALUE" https://your-space-name.hf.space/api/files/test.txt</code></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h3><span class="method delete">DELETE</span> /api/files/&lt;file_path&gt;</h3>
+        <p>删除指定路径的文件</p>
+        <pre><code>curl -X DELETE -H "X-Bduss: YOUR_BDUSS_VALUE" https://your-space-name.hf.space/api/files/test.txt</code></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h3><span class="method get">GET</span> /api/quota</h3>
+        <p>获取网盘配额信息</p>
+        <pre><code>curl -H "X-Bduss: YOUR_BDUSS_VALUE" https://your-space-name.hf.space/api/quota</code></pre>
+    </div>
+    
+    <h2>测试API</h2>
+    <p>输入您的BDUSS值，然后点击按钮测试API：</p>
+    <div>
+        <input type="text" id="bdussInput" placeholder="输入您的BDUSS值">
+        <button onclick="testAPI()">测试API</button>
+    </div>
+    <div class="status" id="testResult" style="display: none;"></div>
+    
+    <h2>注意事项</h2>
+    <ol>
+        <li>BDUSS是敏感信息，请妥善保管，不要泄露给他人</li>
+        <li>下载链接的有效期较短，请尽快使用</li>
+        <li>服务默认限制上传文件大小为1GB</li>
+    </ol>
+    
+    <script>
+        // 检查服务状态
+        async function checkServiceStatus() {
+            const statusDiv = document.getElementById('serviceStatus');
+            statusDiv.className = 'status loading';
+            statusDiv.innerHTML = '<p>正在检查服务状态...</p>';
+            
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `
+                        <p><strong>服务状态：</strong> 正常运行</p>
+                        <p><strong>运行模式：</strong> ${data.mode === 'real' ? '真实模式' : '模拟模式'}</p>
+                        <p><strong>描述：</strong> ${data.description}</p>
+                    `;
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = '<p><strong>服务状态：</strong> 异常</p>';
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `<p><strong>服务状态：</strong> 无法连接到服务 (${error.message})</p>`;
+            }
+        }
+        
+        // 测试API
+        async function testAPI() {
+            const bduss = document.getElementById('bdussInput').value.trim();
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!bduss) {
+                resultDiv.className = 'status error';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<p>请输入BDUSS值</p>';
+                return;
+            }
+            
+            resultDiv.className = 'status loading';
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<p>正在测试API...</p>';
+            
+            try {
+                const response = await fetch('/api/files', {
+                    headers: {
+                        'X-Bduss': bduss
+                    }
+                });
+                
+                const data = await response.json();
+                
+                resultDiv.className = 'status success';
+                resultDiv.innerHTML = `
+                    <p><strong>API测试结果：</strong> 成功</p>
+                    <p><strong>路径：</strong> ${data.path}</p>
+                    <p><strong>文件/文件夹数量：</strong> ${data.total}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.className = 'status error';
+                resultDiv.innerHTML = `<p><strong>API测试失败：</strong> ${error.message}</p>`;
+            }
+        }
+        
+        // 页面加载时检查服务状态
+        window.onload = checkServiceStatus;
+    </script>
+</body>
+</html>
