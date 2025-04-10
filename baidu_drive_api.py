@@ -6,7 +6,7 @@
 提供百度网盘功能的RESTful API接口
 """
 
-# 在导入任何库之前设置环境变量和猴子补丁
+# 在导入任何库之前设置环境变量
 import os
 import sys
 
@@ -20,99 +20,22 @@ os.environ['FUNUTIL_LOG_DISABLE'] = '1'
 os.environ['FUNUTIL_LOG_TO_FILE'] = '0'
 os.environ['FUNSECRET_DISABLE_LOGS'] = '1'
 
-# 先导入模拟的funutil模块
-try:
-    print("尝试导入模拟的funutil模块...")
-    import mock_funutil
-    print("成功导入模拟的funutil模块")
-except Exception as e:
-    print(f"导入模拟的funutil模块失败: {e}")
-    # 如果导入失败，则创建一个简单的模拟模块
-    print("创建内置的模拟模块...")
+# 设置日志记录器
+import logging
 
-    # 创建一个空的日志记录器
-    class DummyLogger:
-        def __init__(self, name=None):
-            self.name = name or "dummy"
+# 配置日志 - 只输出到控制台
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-        def debug(self, msg, *args, **kwargs):
-            pass
-
-        def info(self, msg, *args, **kwargs):
-            pass
-
-        def warning(self, msg, *args, **kwargs):
-            pass
-
-        def error(self, msg, *args, **kwargs):
-            pass
-
-        def critical(self, msg, *args, **kwargs):
-            pass
-
-        def exception(self, msg, *args, **kwargs):
-            pass
-
-        def log(self, level, msg, *args, **kwargs):
-            pass
-
-    # 模拟模块
-    class MockModule:
-        def __getattr__(self, name):
-            return lambda *args, **kwargs: None
-
-    # 注入模拟模块到sys.modules
-    mock_module = MockModule()
-    sys.modules['funutil'] = mock_module
-    sys.modules['funutil.util'] = mock_module
-    sys.modules['funutil.util.log'] = mock_module
-    sys.modules['funsecret'] = mock_module
-    sys.modules['funsecret.secret'] = mock_module
-    sys.modules['funsecret.secret.cache_secret'] = mock_module
-
-    # 导出函数
-    def getLogger(name=None):
-        return DummyLogger(name)
-
-    def get_logger(name=None):
-        return DummyLogger(name)
-
-    # 注入到全局命名空间
-    sys.modules['funutil'].getLogger = getLogger
-    sys.modules['funutil'].get_logger = get_logger
-    sys.modules['funutil.util'].getLogger = getLogger
-    sys.modules['funutil.util'].get_logger = get_logger
-    sys.modules['funutil.util.log'].getLogger = getLogger
-    sys.modules['funutil.util.log'].get_logger = get_logger
-
-    print("成功创建内置的模拟模块")
-
-# 禁用funutil库创建logsdir
-# 使用猴子补丁来防止os.makedirs创建'logs'目录
-original_makedirs = os.makedirs
-def patched_makedirs(name, *args, **kwargs):
-    if name == 'logs' or name.startswith('logs/'):
-        print(f"[警告] 已拦截对{name}目录的创建尝试")
-        # 创建一个假的成功返回
-        return None
-    return original_makedirs(name, *args, **kwargs)
-os.makedirs = patched_makedirs
-
-# 拦截文件打开操作
-original_open = open
-def patched_open(file, *args, **kwargs):
-    if file.startswith('logs/') or file == 'logs':
-        print(f"[警告] 已拦截对{file}文件的打开尝试")
-        # 创建一个内存中的空文件对象
-        import io
-        return io.StringIO()
-    return original_open(file, *args, **kwargs)
-open = patched_open
-
-# 现在导入其他库
+# 导入其他库
 import time
 import json
-import logging
 import tempfile
 import traceback
 from flask import Flask, request, jsonify, send_file, Response, send_from_directory
@@ -137,16 +60,6 @@ except Exception as e:
         print(f"导入真实的BaiDuDrive失败: {e}")
         print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
         sys.exit(1)
-
-# 配置日志 - 只输出到控制台
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='static')
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 限制上传文件大小为1GB
