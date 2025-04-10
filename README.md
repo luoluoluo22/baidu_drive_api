@@ -1,3 +1,13 @@
+---
+title: 百度网盘API服务
+emoji: 🗃️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+license: mit
+---
+
 # 百度网盘API服务
 
 这是一个基于Flask的百度网盘API服务，提供了百度网盘的主要功能的RESTful API接口。
