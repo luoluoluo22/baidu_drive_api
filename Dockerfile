@@ -5,6 +5,7 @@ WORKDIR /app
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建必要的目录
@@ -16,9 +17,12 @@ ENV HOME=/app \
     FUNUTIL_LOG_TO_FILE=0 \
     PYTHONUNBUFFERED=1
 
-# 复制并安装依赖
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 复制安装脚本和依赖文件
+COPY requirements.txt install_dependencies.sh ./
+RUN chmod +x install_dependencies.sh
+
+# 安装依赖
+RUN ./install_dependencies.sh
 
 # 复制应用代码
 COPY . .

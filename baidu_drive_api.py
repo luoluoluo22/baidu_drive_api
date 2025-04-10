@@ -39,10 +39,27 @@ if 'HOME' not in os.environ:
 
 # 导入百度网盘API
 try:
+    # 先检查所有依赖包
+    import sys
+    logger.info(f"Python 版本: {sys.version}")
+    logger.info(f"Python 路径: {sys.path}")
+
+    # 检查fundrive相关包
+    import pkg_resources
+    for package in ['numpy', 'pandas', 'funutil', 'funsecret', 'funfile', 'fundrive']:
+        try:
+            version = pkg_resources.get_distribution(package).version
+            logger.info(f"已安装 {package} 版本: {version}")
+        except pkg_resources.DistributionNotFound:
+            logger.warning(f"未安装 {package}")
+
+    # 尝试导入BaiDuDrive
     from fundrive.drives.baidu.drive import BaiDuDrive
     logger.info("成功导入BaiDuDrive")
 except Exception as e:
     logger.error(f"导入BaiDuDrive失败: {e}")
+    import traceback
+    logger.error(traceback.format_exc())
     raise
 
 app = Flask(__name__)
