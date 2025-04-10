@@ -12,17 +12,13 @@ python --version
 echo "Installed packages:"
 pip list | grep -E "fundrive|funsecret|funutil"
 
-# 检查模拟模块文件是否存在
-echo "Checking mock module files..."
-ls -la /app/mock_*.py
+# 检查自定义驱动文件是否存在
+echo "Checking custom driver file..."
+ls -la /app/custom_baidu_drive.py
 
-# 确保模拟模块文件可访问
-echo "Ensuring mock module files are accessible..."
-chmod 644 /app/mock_*.py 2>/dev/null || echo "No mock files to chmod"
-
-# 显示文件内容
-echo "Displaying mock module files content..."
-cat /app/mock_*.py 2>/dev/null || echo "No mock files to display"
+# 确保自定义驱动文件可访问
+echo "Ensuring custom driver file is accessible..."
+chmod 644 /app/custom_baidu_drive.py 2>/dev/null || echo "Custom driver file not found"
 
 # 启动服务
 echo "Starting service..."
