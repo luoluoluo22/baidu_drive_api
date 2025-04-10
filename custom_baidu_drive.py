@@ -18,14 +18,11 @@ os.environ['FUNSECRET_DISABLE_LOGS'] = '1'
 
 # 直接导入BaiduPCSApi和PcsFile
 try:
-    from fundrives.baidu import BaiduPCSApi, PcsFile
+    # 只尝试导入fundrive.drives.baidu
+    from fundrive.drives.baidu import BaiduPCSApi, PcsFile
 except ImportError:
-    try:
-        # 如果无法导入fundrives.baidu，尝试导入fundrive.drives.baidu
-        from fundrive.drives.baidu import BaiduPCSApi, PcsFile
-    except ImportError:
-        print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
-        sys.exit(1)
+    print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
+    sys.exit(1)
 
 # 定义DriveFile类（简化版）
 class DriveFile(dict):
@@ -109,7 +106,7 @@ class CustomBaiDuDrive:
     自定义百度网盘驱动类
     不依赖于funsecret和funutil库，直接使用传入的凭据
     """
-    
+
     def __init__(self, *args: Any, **kwargs: Any):
         """
         初始化百度网盘驱动
@@ -117,7 +114,7 @@ class CustomBaiDuDrive:
         :param kwargs: 关键字参数
         """
         self.drive: BaiduPCSApi = None
-        
+
         # 如果初始化时提供了bduss，则直接登录
         bduss = kwargs.get('bduss')
         stoken = kwargs.get('stoken')
@@ -140,7 +137,7 @@ class CustomBaiDuDrive:
         if not bduss:
             print("错误: 未提供BDUSS，无法登录百度网盘")
             return False
-            
+
         try:
             self.drive = BaiduPCSApi(bduss=bduss, stoken=stoken, ptoken=ptoken)
             return True
@@ -396,7 +393,7 @@ class CustomBaiDuDrive:
             quota_info = self.drive.quota()
             print(f"PcsQuota对象: {quota_info}")
             print(f"PcsQuota对象属性: {dir(quota_info)}")
-            
+
             # 处理PcsQuota对象
             if hasattr(quota_info, "quota") and hasattr(quota_info, "used"):
                 return {

@@ -65,23 +65,15 @@ from werkzeug.utils import secure_filename
 from functools import wraps
 
 # 导入百度网盘API
-# 优先使用自定义的BaiDuDrive
+# 只使用自定义的BaiDuDrive
 print("尝试导入自定义的BaiDuDrive...")
 try:
     from custom_baidu_drive import BaiDuDrive
     print("成功导入自定义的BaiDuDrive")
-    USE_REAL_API = True
 except Exception as e:
     print(f"导入自定义的BaiDuDrive失败: {e}")
-    print("尝试导入真实的BaiDuDrive...")
-    try:
-        from fundrive.drives.baidu.drive import BaiDuDrive
-        print("成功导入真实的BaiDuDrive")
-        USE_REAL_API = True
-    except Exception as e:
-        print(f"导入真实的BaiDuDrive失败: {e}")
-        print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
-        sys.exit(1)
+    print("错误: 无法导入百度网盘API，请确保已安装fundrive[baidu]库")
+    sys.exit(1)
 
 app = Flask(__name__, static_folder='static')
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 限制上传文件大小为1GB
